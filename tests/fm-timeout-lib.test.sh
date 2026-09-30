@@ -109,7 +109,7 @@ test_the_bound_replaces_the_calling_shell() {
     rm -f "$dir/caller" "$dir/parent"
     (
       . "$ROOT/bin/fm-timeout-lib.sh"
-      printf '%s\n' "$BASHPID" > "$dir/caller"
+      sh -c 'printf "%s\n" "$PPID"' > "$dir/caller"
       PATH=$path fm_exec_timed 5 1 bash -c 'echo "$PPID" > "$1"' _ "$dir/parent"
     ) || fail "the bounded probe failed under PATH=$path"
     caller=$(cat "$dir/caller")
@@ -118,6 +118,30 @@ test_the_bound_replaces_the_calling_shell() {
       || fail "the command's parent $parent is not the replaced caller $caller under PATH=$path"
   done
   pass "fm_exec_timed replaces the calling shell instead of wrapping it"
+}
+
+# Stock macOS bash 3.2 has no BASHPID, and the library runs under set -u, so
+# fm_exec_timed must not read it. Cover the owner resolution in the main shell
+# (the owner is the shell being replaced, so it becomes its parent) and in a
+# subshell (the owner is the calling script), for both watchdog mechanisms.
+test_the_owner_resolves_without_bashpid() {
+  local path out
+  for path in "$PATH" "$PERL_ONLY"; do
+    out=$(PATH=$PATH bash -c '
+      set -u
+      . "$1/bin/fm-timeout-lib.sh"
+      PATH=$2
+      fm_exec_timed 5 1 bash -c "echo main-ok"
+    ' _ "$ROOT" "$path" 2>&1) || fail "fm_exec_timed failed in the main shell under PATH=$path: $out"
+    [ "$out" = main-ok ] || fail "unexpected main-shell output under PATH=$path: $out"
+    out=$(PATH=$PATH bash -c '
+      set -u
+      . "$1/bin/fm-timeout-lib.sh"
+      ( PATH=$2 fm_exec_timed 5 1 bash -c "echo sub-ok" )
+    ' _ "$ROOT" "$path" 2>&1) || fail "fm_exec_timed failed in a subshell under PATH=$path: $out"
+    [ "$out" = sub-ok ] || fail "unexpected subshell output under PATH=$path: $out"
+  done
+  pass "fm_exec_timed resolves its owner in the main shell and a subshell without BASHPID"
 }
 
 # The regression a direct-child watchdog had: the command dies at the bound
@@ -211,7 +235,7 @@ test_an_owner_that_dies_during_startup_ends_the_command() {
   PATH=$PERL_ONLY bash -c '
     . "$1/bin/fm-timeout-lib.sh"
     (
-      echo "$BASHPID" > "$2/watchdog"
+      bash -c "echo \$PPID" > "$2/watchdog"
       while kill -0 "$$" 2>/dev/null; do sleep 0.05; done
       fm_exec_timed 60 1 bash -c "exec sleep 300"
     ) >/dev/null 2>&1 &
@@ -333,6 +357,7 @@ test_run_timed_passes_a_natural_exit_through_a_fired_bound
 test_term_ends_a_cooperative_command_at_the_bound
 test_kill_ends_a_term_ignoring_command_after_the_grace
 test_the_bound_replaces_the_calling_shell
+test_the_owner_resolves_without_bashpid
 test_a_descendant_holding_the_output_cannot_outlast_the_bound
 test_a_signal_to_the_bounding_process_reaches_the_command
 test_a_named_owner_that_is_gone_ends_the_command

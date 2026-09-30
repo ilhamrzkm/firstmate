@@ -157,7 +157,8 @@ test_a_main_shell_call_is_bound_to_its_parent() {
       . "$1/bin/fm-timeout-lib.sh"
       fm_exec_timed 60 1 bash -c "echo \$\$ > \"\$1\"; exec sleep 300" _ "$2"
     '\'' _ "$1" "$2/pid" >/dev/null 2>&1 &
-    while [ ! -s "$2/pid" ]; do sleep 0.02; done
+    n=0
+    while [ ! -s "$2/pid" ] && [ "$n" -lt 500 ]; do sleep 0.02; n=$((n + 1)); done
     exit 0
   ' _ "$ROOT" "$dir"
   wait_for_file "$dir/pid"

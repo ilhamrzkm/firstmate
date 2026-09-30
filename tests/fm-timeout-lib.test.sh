@@ -144,6 +144,35 @@ test_the_owner_resolves_without_bashpid() {
   pass "fm_exec_timed resolves its owner in the main shell and a subshell without BASHPID"
 }
 
+# In the main shell the owner is the shell being replaced, so the watchdog
+# watches its parent: when that parent exits, the command must end well before
+# its bound.
+test_a_main_shell_call_is_bound_to_its_parent() {
+  local dir pid started
+  dir="$TMP_ROOT/main-owner"
+  mkdir -p "$dir"
+  # shellcheck disable=SC2016
+  PATH=$PERL_ONLY bash -c '
+    bash -c '\''
+      . "$1/bin/fm-timeout-lib.sh"
+      fm_exec_timed 60 1 bash -c "echo \$\$ > \"\$1\"; exec sleep 300" _ "$2"
+    '\'' _ "$1" "$2/pid" >/dev/null 2>&1 &
+    while [ ! -s "$2/pid" ]; do sleep 0.02; done
+    exit 0
+  ' _ "$ROOT" "$dir"
+  wait_for_file "$dir/pid"
+  pid=$(cat "$dir/pid")
+  started=$SECONDS
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$((SECONDS - started))" -ge 15 ]; then
+      kill -KILL "$pid" 2>/dev/null || true
+      fail "a main-shell command outlived its exited parent"
+    fi
+    sleep 0.02
+  done
+  pass "fm_exec_timed ends a main-shell command when its parent exits"
+}
+
 # The regression a direct-child watchdog had: the command dies at the bound
 # but a descendant that ignores TERM keeps the captured output open, so the
 # caller waits for the descendant instead of the bound.
@@ -358,6 +387,7 @@ test_term_ends_a_cooperative_command_at_the_bound
 test_kill_ends_a_term_ignoring_command_after_the_grace
 test_the_bound_replaces_the_calling_shell
 test_the_owner_resolves_without_bashpid
+test_a_main_shell_call_is_bound_to_its_parent
 test_a_descendant_holding_the_output_cannot_outlast_the_bound
 test_a_signal_to_the_bounding_process_reaches_the_command
 test_a_named_owner_that_is_gone_ends_the_command

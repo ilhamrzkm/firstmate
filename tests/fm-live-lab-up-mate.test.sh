@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Exercise up's mate readiness path with both supervision-host settings.
 set -u
+# shellcheck source=tests/fixtures.sh
 . "$(dirname "${BASH_SOURCE[0]}")/fixtures.sh"
 
 command -v tmux >/dev/null 2>&1 || { echo 'ok - skipped: tmux is not installed'; exit 0; }

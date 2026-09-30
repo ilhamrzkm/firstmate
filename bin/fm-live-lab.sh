@@ -478,6 +478,8 @@ cmd_up() {
   [ -n "$expect_host" ] || { [ "$harness" = claude ] && [ "$host_line" != off ] && expect_host=yes || expect_host=no; }
   case "$expect_host" in yes|no) ;; *) die "--expect-host takes yes or no" ;; esac
   [ "$host_line" != __default__ ] || { [ "$harness" = claude ] && host_line=claude || host_line=none; }
+  HOST_OFF=no
+  [ "$host_line" != off ] || HOST_OFF=yes
   [ -n "$model" ] || { [ "$harness" = claude ] && model=sonnet || model=openai-codex/gpt-6-luna; }
   CLAUDE_DIR=${CLAUDE_CONFIG_DIR:-}
   case "$CLAUDE_DIR" in ''|/*) ;; *) die "CLAUDE_CONFIG_DIR must be an absolute path" ;; esac
